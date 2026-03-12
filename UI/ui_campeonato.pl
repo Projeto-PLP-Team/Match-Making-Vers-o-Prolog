@@ -53,19 +53,29 @@ tela_gerar_campeonato(Estado, NovoEstado) :-
     (Qtd < 2 -> 
         NovoEstado = estado_sistema(Equipes, Cidades, nenhum, Config, "Cadastre pelo menos 2 times!")
     ; 
-        writeln('\n--- Selecione o Tipo de Campeonato ---'),
-        writeln('[1] Pontos Corridos (Turno e Returno)'),
-        writeln('[2] Mata-Mata'),
-        writeln('[3] Grupos + Mata-Mata'),
-        write('Escolha: '),
-        read_line_to_string(user_input, TipoStr),
-        mapear_tipo(TipoStr, Tipo),
-        writeln('Gerando campeonato...'),
-        (gerar_campeonato(Tipo, Config, Equipes, Cidades, Turno) ->
-            format(string(Msg), "Campeonato (~w) gerado com sucesso!", [Tipo]),
-            NovoEstado = estado_sistema(Equipes, Cidades, Turno, Config, Msg)
+        write('Quantidade de times no campeonato: '),
+        read_line_to_string(user_input, QtdStr),
+        (number_string(QtdSel, QtdStr), QtdSel >= 2, QtdSel =< Qtd ->
+            writeln('\n--- Selecione os Times ---'),
+            listar_times_com_indice(Equipes, 1),
+            selecionar_times(QtdSel, Equipes, [], Selecionados),
+            reverse(Selecionados, TimesSelecionados),
+            writeln('\n--- Selecione o Tipo de Campeonato ---'),
+            writeln('[1] Pontos Corridos (Turno e Returno)'),
+            writeln('[2] Mata-Mata'),
+            writeln('[3] Grupos + Mata-Mata'),
+            write('Escolha: '),
+            read_line_to_string(user_input, TipoStr),
+            mapear_tipo(TipoStr, Tipo),
+            writeln('Gerando campeonato...'),
+            (gerar_campeonato(Tipo, Config, TimesSelecionados, Cidades, Turno) ->
+                format(string(Msg), "Campeonato (~w) gerado com sucesso!", [Tipo]),
+                NovoEstado = estado_sistema(Equipes, Cidades, Turno, Config, Msg)
+            ;
+                NovoEstado = estado_sistema(Equipes, Cidades, nenhum, Config, "Falha ao gerar campeonato.")
+            )
         ;
-            NovoEstado = estado_sistema(Equipes, Cidades, nenhum, Config, "Falha ao gerar campeonato.")
+            NovoEstado = estado_sistema(Equipes, Cidades, nenhum, Config, "Quantidade invalida de times.")
         )
     ).
 
@@ -73,6 +83,26 @@ mapear_tipo("1", pontos_corridos).
 mapear_tipo("2", mata_mata).
 mapear_tipo("3", grupos_mata_mata).
 mapear_tipo(_, pontos_corridos).
+
+listar_times_com_indice([], _).
+listar_times_com_indice([time(N, C) | T], I) :-
+    format('  [~w] ~w (~w)~n', [I, N, C]),
+    I1 is I + 1,
+    listar_times_com_indice(T, I1).
+
+selecionar_times(0, _, Selecionados, Selecionados).
+selecionar_times(N, Disponiveis, Acc, Selecionados) :-
+    N > 0,
+    write('Escolha o numero do time: '),
+    read_line_to_string(user_input, IndStr),
+    (number_string(Ind, IndStr), nth1(Ind, Disponiveis, Time) ->
+        select(Time, Disponiveis, Restantes),
+        N1 is N - 1,
+        selecionar_times(N1, Restantes, [Time | Acc], Selecionados)
+    ;
+        writeln('Opcao invalida. Tente novamente.'),
+        selecionar_times(N, Disponiveis, Acc, Selecionados)
+    ).
 
 tela_lancar_resultados(Estado, NovoEstado) :-
     Estado = estado_sistema(Equipes, Cidades, Camp, Config, _),
