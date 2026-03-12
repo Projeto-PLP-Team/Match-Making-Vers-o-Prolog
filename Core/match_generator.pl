@@ -1,9 +1,14 @@
 
 
+:- module(match_generator, [
+    gerar_estoque/2
+]).
+
 % Gerar estoque de partidas
+% Times é uma lista de time(Nome, Cidade)
 
 gerar_estoque(Times, Estoque) :-
-    findall (
+    findall(
         PartidaCompleta,
         (
             member(M, Times),
@@ -17,8 +22,6 @@ gerar_estoque(Times, Estoque) :-
     
 % Cria as partidas com base no estoque
 % partida (mandante, visitante, data(int,int,int), local)
-% Como prolog trabalha com unificacao, fica faltando apenas a cidade, por isso, buscamos a cidade do time que é usado como entrada (mandante)
 
-criar_partida(Time1, Time2, partida(Time1, Time2, data(0,0,0), Cidade)) :-
-    time(Time1, Cidade).
+criar_partida(time(Nome1, Cidade1), time(Nome2, Cidade2), partida(time(Nome1, Cidade1), time(Nome2, Cidade2), data(0,0,0), Cidade1)).
 

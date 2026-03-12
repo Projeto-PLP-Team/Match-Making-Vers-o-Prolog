@@ -1,19 +1,19 @@
 % Validation/round_validator.pl
 
 :- module(round_validator, [
-    validar_rodada/3
+    validar_rodada/4
 ]).
 
 % Precisaremos importar a distância (fará sentido quando rodarmos tudo no main)
 :- use_module('../Geography/distance').
 
 % --- VALIDADOR PRINCIPAL ---
-% validar_rodada(+Config, +Historico, +Partidas)
-validar_rodada(Config, Historico, Partidas) :-
+% validar_rodada(+Config, +Historico, +Partidas, +Cidades)
+validar_rodada(Config, Historico, Partidas, Cidades) :-
     \+ times_repetidos(Partidas), % \+ é a negação em Prolog (equivalente ao 'not')
     checar_conflito(Config, Partidas),
     checar_sequencia(Config, Historico, Partidas),
-    checar_geografia(Config, Historico, Partidas).
+    checar_geografia(Config, Historico, Partidas, Cidades).
 
 % --- 1. TIMES REPETIDOS ---
 % times_repetidos(+Partidas)
@@ -34,10 +34,10 @@ time_no_jogo(Time, [_ | Resto]) :-
 checar_conflito(restricoes(_, false, _, _), _) :- !. % Se restrição = false, passa direto.
 checar_conflito(restricoes(_, true, _, _), Partidas) :-
     cidades_mandantes(Partidas, Cidades),
-    sem_duplicatas(Cidades). % Substitui a checagem length == length(nub)
+    sem_duplicatas(Cidades).
 
 cidades_mandantes([], []).
-cidades_mandantes([partida(time(_, Cidade), _, _, _, _) | Resto], [Cidade | CidadesResto]) :-
+cidades_mandantes([partida(_, _, _, Cidade, _) | Resto], [Cidade | CidadesResto]) :-
     cidades_mandantes(Resto, CidadesResto).
 
 sem_duplicatas([]).
@@ -75,28 +75,28 @@ jogou_nesse_local(Time, fora, Rodada) :-
     member(partida(_, Time, _, _, _), Rodada).
 
 % --- 4. GEOGRAFIA E CANSAÇO ACUMULADO ---
-checar_geografia(restricoes(false, _, _, _), _, _) :- !.
-checar_geografia(_, [], _) :- !.
-checar_geografia(Config, Historico, Partidas) :-
+checar_geografia(restricoes(false, _, _, _), _, _, _) :- !.
+checar_geografia(_, [], _, _) :- !.
+checar_geografia(Config, Historico, Partidas, Cidades) :-
     % Puxamos o LimiteFadiga da Configuração
     Config = restricoes(_, _, _, LimiteFadiga),
-    validar_fadiga_lista(LimiteFadiga, Historico, Partidas).
+    validar_fadiga_lista(LimiteFadiga, Historico, Partidas, Cidades).
 
-validar_fadiga_lista(_, _, []).
-validar_fadiga_lista(LimiteFadiga, Historico, [P | Ps]) :-
-    validar_fadiga_time(LimiteFadiga, Historico, P),
-    validar_fadiga_lista(LimiteFadiga, Historico, Ps).
+validar_fadiga_lista(_, _, [], _).
+validar_fadiga_lista(LimiteFadiga, Historico, [P | Ps], Cidades) :-
+    validar_fadiga_time(LimiteFadiga, Historico, P, Cidades),
+    validar_fadiga_lista(LimiteFadiga, Historico, Ps, Cidades).
 
-validar_fadiga_time(LimiteFadiga, [RodadaAnterior | _], partida(time(_, CidOrigem), Visitante, _, _, _)) :-
+validar_fadiga_time(LimiteFadiga, [RodadaAnterior | _], partida(time(_, CidOrigem), Visitante, _, _, _), Cidades) :-
     Visitante = time(_, CidDestino),
-    obter_distancia(CidOrigem, CidDestino, DistAtual),
-    buscar_distancia_anterior(Visitante, RodadaAnterior, DistAnterior),
+    obter_distancia(CidOrigem, CidDestino, Cidades, DistAtual),
+    buscar_distancia_anterior(Visitante, RodadaAnterior, DistAnterior, Cidades),
     (DistAtual + DistAnterior) =< LimiteFadiga.
 
-buscar_distancia_anterior(Time, Rodada, Distancia) :-
+buscar_distancia_anterior(Time, Rodada, Distancia, Cidades) :-
     % Se encontrar o time como visitante na rodada anterior:
     member(partida(time(_, CidOrigemAnt), Time, _, _, _), Rodada), !,
     Time = time(_, CidDestinoAnt),
-    obter_distancia(CidOrigemAnt, CidDestinoAnt, Distancia).
+    obter_distancia(CidOrigemAnt, CidDestinoAnt, Cidades, Distancia).
 % Se jogou em casa ou não achou, a distância de viagem foi zero:
-buscar_distancia_anterior(_, _, 0).
+buscar_distancia_anterior(_, _, 0, _).
