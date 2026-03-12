@@ -1,7 +1,13 @@
 :- module(distance, [
-    obter_distancia/3,
-    eh_viagem_inviavel/2
+    obter_distancia/4,
+    eh_viagem_inviavel/2,
+    todas_cidades/2
 ]).
+
+% ...
+todas_cidades(CidadesAdicionais, Todas) :-
+    findall(cidade(E, Lat, Lon), coordenadas(E, Lat, Lon), Estaticas),
+    append(Estaticas, CidadesAdicionais, Todas).
 
 % --- COORDENADAS (Fatos) ---
 
@@ -34,6 +40,13 @@ coordenadas('SP', -23.55, -46.63).
 coordenadas('SE', -10.91, -37.07).
 coordenadas('TO', -10.16, -48.33).
 
+% --- BUSCAR COORDENADA ---
+% buscar_coord(+Nome, +CidadesAdicionais, -Lat, -Lon)
+buscar_coord(Nome, _, Lat, Lon) :-
+    coordenadas(Nome, Lat, Lon), !.
+buscar_coord(Nome, Cidades, Lat, Lon) :-
+    member(cidade(Nome, Lat, Lon), Cidades), !.
+
 % --- HAVERSINE ---
 % haversine(+Lat1, +Lon1, +Lat2, +Lon2, -Distancia)
 haversine(Lat1, Lon1, Lat2, Lon2, Distancia) :-
@@ -45,7 +58,7 @@ haversine(Lat1, Lon1, Lat2, Lon2, Distancia) :-
     Lat1Rad is Lat1 * pi / 180,
     Lat2Rad is Lat2 * pi / 180,
     
-    % O Prolog possui nativamente sin, cos, sqrt e atan2.
+
     % O operador ** é a exponenciação.
     A is sin(DLat/2)**2 + cos(Lat1Rad) * cos(Lat2Rad) * sin(DLon/2)**2,
     C is 2 * atan2(sqrt(A), sqrt(1 - A)),
@@ -53,24 +66,24 @@ haversine(Lat1, Lon1, Lat2, Lon2, Distancia) :-
     Distancia is R * C.
 
 % --- OBTER DISTÂNCIA ---
-% obter_distancia(+Origem, +Destino, -DistanciaArredondada)
+% obter_distancia(+Origem, +Destino, +CidadesAdicionais, -DistanciaArredondada)
 
 % Caso 1: Origem e Destino são iguais. 
-obter_distancia(Origem, Destino, 0) :- 
+obter_distancia(Origem, Destino, _, 0) :- 
     Origem == Destino,
     !. % O Cut (!) diz ao Prolog: "Se chegou aqui, pare! Não teste as regras abaixo."
 
 % Caso 2: Coordenadas válidas são encontradas.
-obter_distancia(Origem, Destino, DistanciaArredondada) :-
-    coordenadas(Origem, Lat1, Lon1),
-    coordenadas(Destino, Lat2, Lon2),
+obter_distancia(Origem, Destino, Cidades, DistanciaArredondada) :-
+    buscar_coord(Origem, Cidades, Lat1, Lon1),
+    buscar_coord(Destino, Cidades, Lat2, Lon2),
     !, % Encontrou os dois estados? Ótimo, faça a conta e não use o fallback.
     haversine(Lat1, Lon1, Lat2, Lon2, DistReal),
     DistanciaArredondada is round(DistReal).
 
 % Caso 3: Fallback (Equivalente ao `if c1 == (0,0) || c2 == (0,0)` do Haskell).
 % Se as regras acima falharem (ex: sigla desconhecida), ele cai aqui.
-obter_distancia(_, _, 800).
+obter_distancia(_, _, _, 800).
 
 % --- VALIDAÇÃO DE INVIABILIDADE ---
 % eh_viagem_inviavel(+Limite, +Distancia)
