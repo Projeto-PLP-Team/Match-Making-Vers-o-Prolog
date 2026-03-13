@@ -59,15 +59,29 @@ verificar_limite_lista(Config, Historico, [P | Ps]) :-
 verificar_limite(restricoes(_, _, MaxSeq, _), Historico, partida(Mandante, Visitante, _, _, _)) :-
     contar_sequencia(Mandante, casa, Historico, SeqM),
     contar_sequencia(Visitante, fora, Historico, SeqV),
-    (SeqM + 1) =< MaxSeq,
-    (SeqV + 1) =< MaxSeq.
+    
+    NovoSeqM is SeqM + 1,
+    NovoSeqV is SeqV + 1,
+    NovoSeqM =< MaxSeq,
+    NovoSeqV =< MaxSeq.
 
+% Histórico esgotado: sequência atual é zero
 contar_sequencia(_, _, [], 0) :- !.
+% Jogou nesse local na rodada mais recente: conta e continua
 contar_sequencia(Time, Local, [Rodada | Resto], Total) :-
     jogou_nesse_local(Time, Local, Rodada), !,
     contar_sequencia(Time, Local, Resto, SubTotal),
     Total is SubTotal + 1.
-contar_sequencia(_, _, _, 0). % Se quebrou a sequência, zera.
+% Jogou no local oposto: sequência atual zerou, para aqui
+contar_sequencia(Time, Local, [Rodada | _], 0) :-
+    oposto(Local, Oposto),
+    jogou_nesse_local(Time, Oposto, Rodada), !.
+% Não jogou nessa rodada (BYE/folga): ignora e continua contando
+contar_sequencia(Time, Local, [_ | Resto], Total) :-
+    contar_sequencia(Time, Local, Resto, Total).
+
+oposto(casa, fora).
+oposto(fora, casa).
 
 jogou_nesse_local(Time, casa, Rodada) :-
     member(partida(Time, _, _, _, _), Rodada).

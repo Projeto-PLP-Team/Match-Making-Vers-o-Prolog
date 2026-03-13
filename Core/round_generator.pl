@@ -5,64 +5,109 @@
 :- use_module('../Validation/round_validator').
 :- use_module('../Types/estado').
 
-% --- PONTO DE ENTRADA PRINCIPAL ---
-% gerar_campeonato(+Tipo, +Config, +Times, +Cidades, -Campeonato)
+% PONTO DE ENTRADA
+
 gerar_campeonato(pontos_corridos, Config, Times, Cidades, Campeonato) :-
     gerar_pontos_corridos(Config, Times, Cidades, Campeonato).
 
-gerar_campeonato(mata_mata, Config, Times, Cidades, Campeonato) :-
-    gerar_mata_mata(Config, Times, Cidades, Campeonato).
+gerar_campeonato(mata_mata, _Config, Times, _Cidades, [Rodada]) :-
+    random_permutation(Times, Shuffled),
+    montar_confrontos(Shuffled, Rodada).
 
 gerar_campeonato(grupos_mata_mata, Config, Times, Cidades, Campeonato) :-
     gerar_grupos_mata_mata(Config, Times, Cidades, Campeonato).
 
-% --- 1. PONTOS CORRIDOS (Circle Method) ---
-gerar_pontos_corridos(_Config, Times, _Cidades, TurnoReturno) :-
+
+% PONTOS CORRIDOS
+%
+% Passo a passo:
+%   1. Gerar estoque completo: todas as combinacoes de todos os times (A vs B e B vs A)
+%      O backtracking decide qual usar, garantindo que cada par jogue exatamente uma vez no turno via par_ja_jogou.
+%   2. Backtracking -> monta N-1 rodadas respeitando as restrições (geração do turno).
+%   3. Returno -> inverte o turno gerado.
+
+gerar_pontos_corridos(Config, Times, Cidades, TurnoReturno) :-
     length(Times, N),
-    (N mod 2 =\= 0 -> TimesComBye = [time('BYE', 'NENHUMA') | Times] ; TimesComBye = Times),
-    length(TimesComBye, TotalN),
-    NumRodadas is TotalN - 1,
-    TimesComBye = [Fixo | Rotativos],
-    gerar_rodadas_circle(NumRodadas, Fixo, Rotativos, [], Turno),
+    ( N mod 2 =\= 0
+    -> TimesComBye = [time('BYE', 'NENHUMA') | Times]
+    ;  TimesComBye = Times
+    ),
+    gerar_estoque_completo(TimesComBye, EstoqueCompleto),
+    random_permutation(EstoqueCompleto, Estoque),
+    length(TimesComBye, QtdTimes),
+    NumRodadas is QtdTimes - 1,
+    MetaRodada is QtdTimes // 2,
+    gerar_turno_completo(Config, NumRodadas, MetaRodada, Estoque, [], Cidades, Turno),
     gerar_returno(Turno, Returno),
     append(Turno, Returno, TurnoReturno).
 
-% Overload maplist to handle BYE filtering
-criar_partidas_filtradas([], [], []).
-criar_partidas_filtradas([T1|R1], [T2|R2], Partidas) :-
-    (T1 = time('BYE', _) ; T2 = time('BYE', _)), !,
-    criar_partidas_filtradas(R1, R2, Partidas).
-criar_partidas_filtradas([T1|R1], [T2|R2], [partida(T1, T2, data(0,0,0), Loc, pendente) | Resto]) :-
-    T1 = time(_, Loc),
-    criar_partidas_filtradas(R1, R2, Resto).
+% Gera todas as partidas em ambas orientações, sem BYE.
+gerar_estoque_completo(Times, Estoque) :-
+    findall(
+        partida(M, V, data(0,0,0), Loc, pendente),
+        (
+            member(M, Times), member(V, Times),
+            M \= V,
+            \+ M = time('BYE', _),
+            \+ V = time('BYE', _),
+            M = time(_, Loc)
+        ),
+        Estoque
+    ).
 
-% Refined version of montar_rodada_circle_simples
-montar_rodada_circle_simples_v2(Fixo, Rotativos, Rodada) :-
-    length(Rotativos, L),
-    Half is L // 2,
-    split_at(Half, Rotativos, Top, [B1 | BRest]),
-    reverse(BRest, RevBRest),
-    ( (Fixo = time('BYE', _) ; B1 = time('BYE', _)) -> 
-        PartidasIniciais = [] 
-    ; 
-        Fixo = time(_, Loc), PartidasIniciais = [partida(Fixo, B1, data(0,0,0), Loc, pendente)]
-    ),
-    criar_partidas_filtradas(Top, RevBRest, PartidasT),
-    append(PartidasIniciais, PartidasT, Rodada).
+% BACKTRACKING COM RESTRIÇÕES
+%
+% NumRodadas controla quantas rodadas ainda precisam ser geradas.
+% Quando chega a 0, o turno está completo.
 
-gerar_rodadas_circle(0, _, _, Rodadas, Rodadas) :- !.
-gerar_rodadas_circle(N, Fixo, Rotativos, Acc, Rodadas) :-
-    montar_rodada_circle_simples_v2(Fixo, Rotativos, Rodada),
-    rotacionar(Rotativos, NovosRotativos),
-    N1 is N - 1,
-    append(Acc, [Rodada], NovoAcc),
-    gerar_rodadas_circle(N1, Fixo, NovosRotativos, NovoAcc, Rodadas).
+gerar_turno_completo(Config, NumRodadas, MetaRodada, Estoque, Historico, Cidades, Turno) :-
+    realizar_tentativa(Config, NumRodadas, MetaRodada, Estoque, Historico, Cidades, Turno), !.
+gerar_turno_completo(Config, NumRodadas, MetaRodada, Estoque, Historico, Cidades, Turno) :-
+    relaxar_restricao(Config, NovaConfig),
+    NovaConfig = restricoes(_, _, _, Limite),
+    Limite < 10000,
+    gerar_turno_completo(NovaConfig, NumRodadas, MetaRodada, Estoque, Historico, Cidades, Turno).
 
-rotacionar([H | T], Rotacionado) :-
-    append(T, [H], Rotacionado).
+% Caso base: todas as rodadas geradas.
+realizar_tentativa(_, 0, _, _, _, _, []) :- !.
+% Gera uma rodada e recursa para as próximas.
+realizar_tentativa(Config, NumRodadas, Meta, Estoque, Historico, Cidades, [Rodada | ProximasRodadas]) :-
+    NumRodadas > 0,
+    gerar_rodada(Config, Meta, [], Estoque, Historico, Cidades, Rodada, Sobra),
+    NumRodadas1 is NumRodadas - 1,
+    realizar_tentativa(Config, NumRodadas1, Meta, Sobra, [Rodada | Historico], Cidades, ProximasRodadas).
 
-split_at(0, L, [], L) :- !.
-split_at(N, [H|T], [H|L1], L2) :- N > 0, N1 is N - 1, split_at(N1, T, L1, L2).
+% Caso base: meta de partidas na rodada atingida.
+gerar_rodada(_, 0, Escolhidos, Estoque, _, _, Escolhidos, Estoque) :- !.
+% Tenta incluir P: par não jogou ainda + passa na validação.
+gerar_rodada(Config, Meta, Escolhidos, [P | Ps], Historico, Cidades, Rodada, Sobra) :-
+    P = partida(M, V, _, _, _),
+    \+ par_ja_jogou(M, V, Historico),
+    \+ par_ja_na_rodada(M, V, Escolhidos),
+    validar_rodada(Config, Historico, [P | Escolhidos], Cidades),
+    NovaMeta is Meta - 1,
+    gerar_rodada(Config, NovaMeta, [P | Escolhidos], Ps, Historico, Cidades, Rodada, Sobra).
+% P não passou: descarta para essa rodada, volta ao estoque como Sobra.
+gerar_rodada(Config, Meta, Escolhidos, [P | Ps], Historico, Cidades, Rodada, [P | SobraResto]) :-
+    gerar_rodada(Config, Meta, Escolhidos, Ps, Historico, Cidades, Rodada, SobraResto).
+
+% par_ja_jogou(+M, +V, +Historico)
+% Verdadeiro se M vs V ou V vs M já aparecem no histórico de rodadas.
+par_ja_jogou(M, V, Historico) :-
+    flatten(Historico, Todas),
+    ( member(partida(M, V, _, _, _), Todas)
+    ; member(partida(V, M, _, _, _), Todas)
+    ).
+
+% par_ja_na_rodada(+M, +V, +Escolhidos)
+% Evita repetir o par dentro da mesma rodada.
+par_ja_na_rodada(M, V, Escolhidos) :-
+    ( member(partida(M, V, _, _, _), Escolhidos)
+    ; member(partida(V, M, _, _, _), Escolhidos)
+    ).
+
+
+% RETURNO
 
 gerar_returno([], []).
 gerar_returno([Rodada | Resto], [RodadaInvertida | RestoInvertido]) :-
@@ -70,31 +115,33 @@ gerar_returno([Rodada | Resto], [RodadaInvertida | RestoInvertido]) :-
     gerar_returno(Resto, RestoInvertido).
 
 inverter_rodada([], []).
-inverter_rodada([partida(M, V, D, _, _) | T], [partida(V, M, D, Loc, pendente) | Resto]) :-
-    V = time(_, Loc),
+inverter_rodada(
+    [partida(Mandante, Visitante, Data, _, _) | T],
+    [partida(Visitante, Mandante, Data, NovoLoc, pendente) | Resto]
+) :-
+    Visitante = time(_, NovoLoc),
     inverter_rodada(T, Resto).
 
-% --- 2. MATA-MATA ---
-gerar_mata_mata(_, Times, _, [Rodada]) :-
-    random_permutation(Times, Shuffled),
-    montar_confrontos(Shuffled, Rodada).
+
+% MATA-MATA
 
 montar_confrontos([], []).
+montar_confrontos([_], []).
 montar_confrontos([T1, T2 | Resto], [partida(T1, T2, data(0,0,0), L, pendente) | Proximas]) :-
     T1 = time(_, L),
     montar_confrontos(Resto, Proximas).
-montar_confrontos([_], []).
 
-% --- 3. GRUPOS + MATA-MATA ---
+% GRUPOS + MATA-MATA
+
 gerar_grupos_mata_mata(Config, Times, Cidades, Campeonato) :-
     length(Times, Total),
-    (Total < 4 -> NumGrupos = 1 ; NumGrupos = 4),
+    ( Total < 4 -> NumGrupos = 1 ; NumGrupos = 4 ),
     random_permutation(Times, Shuffled),
     dividir_em_grupos(Shuffled, NumGrupos, Grupos),
-    maplist(gerar_pontos_corridos_simples(Config, Cidades), Grupos, TurnosGrupos),
+    maplist(gerar_grupo(Config, Cidades), Grupos, TurnosGrupos),
     flatten(TurnosGrupos, Campeonato).
 
-gerar_pontos_corridos_simples(Config, Cidades, Grupo, Turno) :-
+gerar_grupo(Config, Cidades, Grupo, Turno) :-
     gerar_pontos_corridos(Config, Grupo, Cidades, Turno).
 
 dividir_em_grupos([], _, []).
@@ -102,7 +149,19 @@ dividir_em_grupos(L, 1, [L]) :- !.
 dividir_em_grupos(L, N, [Grupo | Resto]) :-
     length(L, Total),
     Size is Total // N,
-    (Size < 1 -> ActualSize = 1 ; ActualSize = Size),
+    ( Size < 1 -> ActualSize = 1 ; ActualSize = Size ),
     split_at(ActualSize, L, Grupo, Sobra),
     N1 is N - 1,
     dividir_em_grupos(Sobra, N1, Resto).
+
+
+% UTILITÁRIOS
+
+rotacionar([H | T], Rotacionado) :-
+    append(T, [H], Rotacionado).
+
+split_at(0, L, [], L) :- !.
+split_at(N, [H|T], [H|L1], L2) :-
+    N > 0,
+    N1 is N - 1,
+    split_at(N1, T, L1, L2).
