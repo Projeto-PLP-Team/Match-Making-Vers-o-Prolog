@@ -59,17 +59,18 @@ exibir_partidas_com_indice([partida(time(M, _), time(V, _), _, _, Res) | T], I) 
     exibir_partidas_com_indice(T, I1).
 
 exibir_classificacao(Class) :-
-    writeln('Pos | Time            | Pts | V | E | D | GP | GC | SG'),
-    writeln('-------------------------------------------------------'),
+    writeln('Pos | Time             | Pts | V | E | D | GP | GC | SG'),
+    writeln('----------------------------------------------------------'),
     exibir_linhas_class(Class, 1).
 
 exibir_linhas_class([], _).
 exibir_linhas_class([stats(time(Nome, _), Pts, V, E, D, GP, GC, SG) | T], Pos) :-
-    format('~w°  | ~-15w | ~w  | ~w | ~w | ~w | ~w  | ~w  | ~w~n', [Pos, Nome, Pts, V, E, D, GP, GC, SG]),
+    format('~w~t~4|~w~t~22|~w~t~27|~w~t~30|~w~t~33|~w~t~36|~w~t~40|~w~t~44|~w~n',
+           [Pos, Nome, Pts, V, E, D, GP, GC, SG]),
     Pos1 is Pos + 1,
     exibir_linhas_class(T, Pos1).
 
 exibir_distancias([]).
 exibir_distancias([dist_time(time(Nome, _), KM) | T]) :-
-    format('  - ~-15w : ~w KM~n', [Nome, KM]),
+    format('  - ~w~t~20|: ~w KM~n', [Nome, KM]),
     exibir_distancias(T).

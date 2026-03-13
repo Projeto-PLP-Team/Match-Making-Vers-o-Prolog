@@ -7,14 +7,12 @@
 :- use_module('../Geography/distance').
 
 % --- CLASSIFICAÇÃO ---
-% calcular_classificacao(+Campeonato, -Classificacao)
-% Classificacao é uma lista de stats(Time, Pts, V, E, D, GP, GC, SG)
 calcular_classificacao(nenhum, []) :- !.
 calcular_classificacao(Turno, Classificacao) :-
     flatten(Turno, TodasPartidas),
     extrair_times(TodasPartidas, Times),
     maplist(processar_time(TodasPartidas), Times, Stats),
-    sort(2, @>=, Stats, StatsOrdenados), % Ordena por pontos
+    sort(2, @>=, Stats, StatsOrdenados),
     Classificacao = StatsOrdenados.
 
 extrair_times(Partidas, Times) :-
@@ -40,12 +38,10 @@ contar_stats([res(GP1, GC1) | T], Pts, V, E, D, GP, GC) :-
      Pts is P1 + 1, V = V1, E is E1 + 1, D = D1).
 
 % --- DISTÂNCIAS ---
-% calcular_distancias(+Campeonato, +Cidades, -Distancias)
-% Distancias é uma lista de dist_time(Time, TotalKM)
 calcular_distancias(nenhum, _, []) :- !.
 calcular_distancias(Turno, Cidades, Distancias) :-
     extrair_times_sem_bye(Turno, Times),
-    maplist(distancia_por_time(Turno, Cidades), Times, Distancias).
+    maplist(calcular_distancia_time(Turno, Cidades), Times, Distancias).
 
 extrair_times_sem_bye(Turno, Times) :-
     flatten(Turno, Todas),
@@ -54,23 +50,20 @@ extrair_times_sem_bye(Turno, Times) :-
     append(T1, T2, T3),
     sort(T3, Times).
 
-distancia_por_time(Turno, Cidades, dist_time(Time, TotalKM)) :-
+% Renomeado e com Time como terceiro argumento para o maplist funcionar corretamente
+calcular_distancia_time(Turno, Cidades, Time, dist_time(Time, TotalKM)) :-
     Time = time(_, CidadeBase),
     calcular_viagens(Turno, Time, CidadeBase, Cidades, TotalKM).
 
 calcular_viagens([], _, _, _, 0).
-% Na rodada, o time pode jogar em casa ou fora
 calcular_viagens([Rodada | Resto], Time, CidadeAtual, Cidades, Total) :-
     (member(partida(Time, _Visitante, _, _, _), Rodada) ->
-        % Joga em casa: distância é 0 até o estádio (simplificado)
         ProximaCidade = CidadeAtual, Dist = 0
     ; member(partida(Mandante, Time, _, _, _), Rodada) ->
-        % Joga fora: viaja da CidadeAtual para a cidade do Mandante
         Mandante = time(_, CidadeMandante),
         obter_distancia(CidadeAtual, CidadeMandante, Cidades, Dist),
         ProximaCidade = CidadeMandante
     ;
-        % Não jogou (BYE): fica onde estava
         ProximaCidade = CidadeAtual, Dist = 0
     ),
     calcular_viagens(Resto, Time, ProximaCidade, Cidades, SubTotal),
