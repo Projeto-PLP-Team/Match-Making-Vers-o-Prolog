@@ -95,15 +95,16 @@ selecionar_times(N, Disponiveis, Acc, Selecionados) :-
     N > 0,
     write('Escolha o numero do time: '),
     read_line_to_string(user_input, IndStr),
-    (number_string(Ind, IndStr), nth1(Ind, Disponiveis, Time) ->
-        select(Time, Disponiveis, Restantes),
-        N1 is N - 1,
-        selecionar_times(N1, Restantes, [Time | Acc], Selecionados)
-    ;
-        writeln('Opcao invalida. Tente novamente.'),
+    (   number_string(Ind, IndStr),
+        nth1(Ind, Disponiveis, Time),
+        \+ member(Time, Acc)
+    ->  N1 is N - 1,
+        selecionar_times(N1, Disponiveis, [Time | Acc], Selecionados)
+    ;   writeln('Opcao invalida ou time ja selecionado. Tente novamente.'),
         selecionar_times(N, Disponiveis, Acc, Selecionados)
     ).
 
+    
 tela_lancar_resultados(Estado, NovoEstado) :-
     Estado = estado_sistema(Equipes, Cidades, Camp, Config, _),
     (Camp = nenhum -> NovoEstado = Estado, writeln('Nenhum campeonato gerado.') ;
